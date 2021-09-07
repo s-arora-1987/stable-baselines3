@@ -2,10 +2,9 @@ import os
 import shutil
 
 import gym
-import numpy as np
 import pytest
 
-from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3, HerReplayBuffer
+from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3
 from stable_baselines3.common.callbacks import (
     CallbackList,
     CheckpointCallback,
@@ -15,8 +14,6 @@ from stable_baselines3.common.callbacks import (
     StopTrainingOnRewardThreshold,
 )
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.envs import BitFlippingEnv, IdentityEnv
-from stable_baselines3.common.vec_env import DummyVecEnv
 
 
 @pytest.mark.parametrize("model_class", [A2C, PPO, SAC, TD3, DQN, DDPG])
@@ -36,12 +33,7 @@ def test_callbacks(tmp_path, model_class):
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-1200, verbose=1)
 
     eval_callback = EvalCallback(
-        eval_env,
-        callback_on_new_best=callback_on_best,
-        best_model_save_path=log_folder,
-        log_path=log_folder,
-        eval_freq=100,
-        warn=False,
+        eval_env, callback_on_new_best=callback_on_best, best_model_save_path=log_folder, log_path=log_folder, eval_freq=100
     )
     # Equivalent to the `checkpoint_callback`
     # but here in an event-driven manner
@@ -100,70 +92,3 @@ def select_env(model_class) -> str:
         return "CartPole-v0"
     else:
         return "Pendulum-v0"
-
-
-def test_eval_callback_vec_env():
-    # tests that eval callback does not crash when given a vector
-    n_eval_envs = 3
-    train_env = IdentityEnv()
-    eval_env = DummyVecEnv([lambda: IdentityEnv()] * n_eval_envs)
-    model = A2C("MlpPolicy", train_env, seed=0)
-
-    eval_callback = EvalCallback(
-        eval_env,
-        eval_freq=100,
-        warn=False,
-    )
-    model.learn(300, callback=eval_callback)
-    assert eval_callback.last_mean_reward == 100.0
-
-
-def test_eval_success_logging(tmp_path):
-    n_bits = 2
-    n_envs = 2
-    env = BitFlippingEnv(n_bits=n_bits)
-    eval_env = DummyVecEnv([lambda: BitFlippingEnv(n_bits=n_bits)] * n_envs)
-    eval_callback = EvalCallback(
-        eval_env,
-        eval_freq=250,
-        log_path=tmp_path,
-        warn=False,
-    )
-    model = DQN(
-        "MultiInputPolicy",
-        env,
-        replay_buffer_class=HerReplayBuffer,
-        learning_starts=100,
-        seed=0,
-        replay_buffer_kwargs=dict(max_episode_length=n_bits),
-    )
-    model.learn(500, callback=eval_callback)
-    assert len(eval_callback._is_success_buffer) > 0
-    # More than 50% success rate
-    assert np.mean(eval_callback._is_success_buffer) > 0.5
-
-
-def test_eval_callback_logs_are_written_with_the_correct_timestep(tmp_path):
-    # Skip if no tensorboard installed
-    pytest.importorskip("tensorboard")
-    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-
-    env_name = select_env(DQN)
-    model = DQN(
-        "MlpPolicy",
-        env_name,
-        policy_kwargs=dict(net_arch=[32]),
-        tensorboard_log=tmp_path,
-        verbose=1,
-        seed=1,
-    )
-
-    eval_env = gym.make(env_name)
-    eval_freq = 101
-    eval_callback = EvalCallback(eval_env, eval_freq=eval_freq, warn=False)
-    model.learn(500, callback=eval_callback)
-
-    acc = EventAccumulator(str(tmp_path / "DQN_1"))
-    acc.Reload()
-    for event in acc.scalars.Items("eval/mean_reward"):
-        assert event.step % eval_freq == 0

@@ -119,8 +119,3 @@ cuda
 Polyak
 gSDE
 rollouts
-Pyro
-softmax
-stdout
-Contrib
-Quantile

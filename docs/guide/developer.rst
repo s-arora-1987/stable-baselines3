@@ -31,9 +31,6 @@ Each algorithm has two main methods:
 - ``.train()`` which updates the parameters using samples from the buffer
 
 
-.. image:: ../_static/img/sb3_loop.png
-
-
 Where to start?
 ===============
 
@@ -58,8 +55,7 @@ Pre-Processing
 To handle different observation spaces, some pre-processing needs to be done (e.g. one-hot encoding for discrete observation).
 Most of the code for pre-processing is in ``common/preprocessing.py`` and ``common/policies.py``.
 
-For images, environment is automatically wrapped with ``VecTransposeImage`` if observations are detected to be images with
-channel-last convention to transform it to PyTorch's channel-first convention.
+For images, we make use of an additional wrapper ``VecTransposeImage`` because PyTorch uses the "channel-first" convention.
 
 
 Policy Structure

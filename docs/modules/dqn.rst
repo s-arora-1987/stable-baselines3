@@ -17,7 +17,6 @@ and make use of different tricks to stabilize the learning with neural networks:
 
     MlpPolicy
     CnnPolicy
-    MultiInputPolicy
 
 
 Notes
@@ -41,34 +40,33 @@ Can I use?
 ============= ====== ===========
 Space         Action Observation
 ============= ====== ===========
-Discrete      ✔️      ✔️
-Box           ❌      ✔️
-MultiDiscrete ❌      ✔️
-MultiBinary   ❌      ✔️
-Dict          ❌      ✔️️
+Discrete      ✔      ✔
+Box           ❌      ✔
+MultiDiscrete ❌      ✔
+MultiBinary   ❌      ✔
 ============= ====== ===========
 
 
 Example
 -------
 
-This example is only to demonstrate the use of the library and its functions, and the trained agents may not solve the environments. Optimized hyperparameters can be found in RL Zoo `repository <https://github.com/DLR-RM/rl-baselines3-zoo>`_.
-
 .. code-block:: python
 
   import gym
+  import numpy as np
 
   from stable_baselines3 import DQN
+  from stable_baselines3.dqn import MlpPolicy
 
-  env = gym.make("CartPole-v0")
+  env = gym.make('Pendulum-v0')
 
-  model = DQN("MlpPolicy", env, verbose=1)
+  model = DQN(MlpPolicy, env, verbose=1)
   model.learn(total_timesteps=10000, log_interval=4)
-  model.save("dqn_cartpole")
+  model.save("dqn_pendulum")
 
   del model # remove to demonstrate saving and loading
 
-  model = DQN.load("dqn_cartpole")
+  model = DQN.load("dqn_pendulum")
 
   obs = env.reset()
   while True:
@@ -103,7 +101,7 @@ Run the benchmark (replace ``$ENV_ID`` by the env id, for instance ``BreakoutNoF
 
 .. code-block:: bash
 
-  python train.py --algo dqn --env $ENV_ID --eval-episodes 10 --eval-freq 10000
+  python train.py --algo a2c --env $ENV_ID --eval-episodes 10 --eval-freq 10000
 
 
 Plot the results:
@@ -135,7 +133,4 @@ DQN Policies
   :noindex:
 
 .. autoclass:: CnnPolicy
-  :members:
-
-.. autoclass:: MultiInputPolicy
   :members:

@@ -12,7 +12,7 @@ import torch as th
 
 from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3
 from stable_baselines3.common.base_class import BaseAlgorithm
-from stable_baselines3.common.envs import FakeImageEnv, IdentityEnv, IdentityEnvBox
+from stable_baselines3.common.identity_env import FakeImageEnv, IdentityEnv, IdentityEnvBox
 from stable_baselines3.common.save_util import load_from_pkl, open_path, save_to_pkl
 from stable_baselines3.common.utils import get_device
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -176,24 +176,24 @@ def test_set_env(model_class):
 
     kwargs = {}
     if model_class in {DQN, DDPG, SAC, TD3}:
-        kwargs = dict(learning_starts=100, train_freq=4)
+        kwargs = dict(learning_starts=100)
     elif model_class in {A2C, PPO}:
-        kwargs = dict(n_steps=64)
+        kwargs = dict(n_steps=100)
 
     # create model
     model = model_class("MlpPolicy", env, policy_kwargs=dict(net_arch=[16]), **kwargs)
     # learn
-    model.learn(total_timesteps=128)
+    model.learn(total_timesteps=300)
 
     # change env
     model.set_env(env2)
     # learn again
-    model.learn(total_timesteps=128)
+    model.learn(total_timesteps=300)
 
     # change env test wrapping
     model.set_env(env3)
     # learn again
-    model.learn(total_timesteps=128)
+    model.learn(total_timesteps=300)
 
 
 @pytest.mark.parametrize("model_class", MODEL_LIST)
@@ -220,54 +220,11 @@ def test_exclude_include_saved_params(tmp_path, model_class):
     # Check if include works
     model.save(tmp_path / "test_save", exclude=["verbose"], include=["verbose"])
     del model
-    # Load with custom objects
-    custom_objects = dict(learning_rate=2e-5, dummy=1.0)
-    model = model_class.load(str(tmp_path / "test_save.zip"), custom_objects=custom_objects)
+    model = model_class.load(str(tmp_path / "test_save.zip"))
     assert model.verbose == 2
-    # Check that the custom object was taken into account
-    assert model.learning_rate == custom_objects["learning_rate"]
-    # Check that only parameters that are here already are replaced
-    assert not hasattr(model, "dummy")
 
     # clear file from os
     os.remove(tmp_path / "test_save.zip")
-
-
-def test_save_load_pytorch_var(tmp_path):
-    model = SAC("MlpPolicy", "Pendulum-v0", seed=3, policy_kwargs=dict(net_arch=[64], n_critics=1))
-    model.learn(200)
-    save_path = str(tmp_path / "sac_pendulum")
-    model.save(save_path)
-    env = model.get_env()
-    log_ent_coef_before = model.log_ent_coef
-
-    del model
-
-    model = SAC.load(save_path, env=env)
-    assert th.allclose(log_ent_coef_before, model.log_ent_coef)
-    model.learn(200)
-    log_ent_coef_after = model.log_ent_coef
-    # Check that the entropy coefficient is still optimized
-    assert not th.allclose(log_ent_coef_before, log_ent_coef_after)
-
-    # With a fixed entropy coef
-    model = SAC("MlpPolicy", "Pendulum-v0", seed=3, ent_coef=0.01, policy_kwargs=dict(net_arch=[64], n_critics=1))
-    model.learn(200)
-    save_path = str(tmp_path / "sac_pendulum")
-    model.save(save_path)
-    env = model.get_env()
-    assert model.log_ent_coef is None
-    ent_coef_before = model.ent_coef_tensor
-
-    del model
-
-    model = SAC.load(save_path, env=env)
-    assert th.allclose(ent_coef_before, model.ent_coef_tensor)
-    model.learn(200)
-    ent_coef_after = model.ent_coef_tensor
-    assert model.log_ent_coef is None
-    # Check that the entropy coefficient is still the same
-    assert th.allclose(ent_coef_before, ent_coef_after)
 
 
 @pytest.mark.parametrize("model_class", [A2C, TD3])
@@ -281,12 +238,12 @@ def test_save_load_env_cnn(tmp_path, model_class):
     env = FakeImageEnv(screen_height=40, screen_width=40, n_channels=2, discrete=False)
     kwargs = dict(policy_kwargs=dict(net_arch=[32]))
     if model_class == TD3:
-        kwargs.update(dict(buffer_size=100, learning_starts=50, train_freq=4))
+        kwargs.update(dict(buffer_size=100, learning_starts=50))
 
     model = model_class("CnnPolicy", env, **kwargs).learn(100)
     model.save(tmp_path / "test_save")
     # Test loading with env and continuing training
-    model = model_class.load(str(tmp_path / "test_save.zip"), env=env, **kwargs).learn(100)
+    model = model_class.load(str(tmp_path / "test_save.zip"), env=env).learn(100)
     # clear file from os
     os.remove(tmp_path / "test_save.zip")
 
@@ -308,8 +265,6 @@ def test_save_load_replay_buffer(tmp_path, model_class):
     assert np.allclose(old_replay_buffer.actions, model.replay_buffer.actions)
     assert np.allclose(old_replay_buffer.rewards, model.replay_buffer.rewards)
     assert np.allclose(old_replay_buffer.dones, model.replay_buffer.dones)
-    assert np.allclose(old_replay_buffer.timeouts, model.replay_buffer.timeouts)
-    infos = [[{"TimeLimit.truncated": truncated}] for truncated in old_replay_buffer.timeouts]
 
     # test extending replay buffer
     model.replay_buffer.extend(
@@ -318,7 +273,6 @@ def test_save_load_replay_buffer(tmp_path, model_class):
         old_replay_buffer.actions,
         old_replay_buffer.rewards,
         old_replay_buffer.dones,
-        infos,
     )
 
 
@@ -363,8 +317,7 @@ def test_warn_buffer(recwarn, model_class, optimize_memory_usage):
 
 @pytest.mark.parametrize("model_class", MODEL_LIST)
 @pytest.mark.parametrize("policy_str", ["MlpPolicy", "CnnPolicy"])
-@pytest.mark.parametrize("use_sde", [False, True])
-def test_save_load_policy(tmp_path, model_class, policy_str, use_sde):
+def test_save_load_policy(tmp_path, model_class, policy_str):
     """
     Test saving and loading policy only.
 
@@ -372,11 +325,6 @@ def test_save_load_policy(tmp_path, model_class, policy_str, use_sde):
     :param policy_str: (str) Name of the policy.
     """
     kwargs = dict(policy_kwargs=dict(net_arch=[16]))
-
-    # gSDE is only applicable for A2C, PPO and SAC
-    if use_sde and model_class not in [A2C, PPO, SAC]:
-        pytest.skip()
-
     if policy_str == "MlpPolicy":
         env = select_env(model_class)
     else:
@@ -387,9 +335,6 @@ def test_save_load_policy(tmp_path, model_class, policy_str, use_sde):
                 buffer_size=250, learning_starts=100, policy_kwargs=dict(features_extractor_kwargs=dict(features_dim=32))
             )
         env = FakeImageEnv(screen_height=40, screen_width=40, n_channels=2, discrete=model_class == DQN)
-
-    if use_sde:
-        kwargs["use_sde"] = True
 
     env = DummyVecEnv([lambda: env])
 
@@ -461,82 +406,6 @@ def test_save_load_policy(tmp_path, model_class, policy_str, use_sde):
     os.remove(tmp_path / "policy.pkl")
     if actor_class is not None:
         os.remove(tmp_path / "actor.pkl")
-
-
-@pytest.mark.parametrize("model_class", [DQN])
-@pytest.mark.parametrize("policy_str", ["MlpPolicy", "CnnPolicy"])
-def test_save_load_q_net(tmp_path, model_class, policy_str):
-    """
-    Test saving and loading q-network/quantile net only.
-
-    :param model_class: (BaseAlgorithm) A RL model
-    :param policy_str: (str) Name of the policy.
-    """
-    kwargs = dict(policy_kwargs=dict(net_arch=[16]))
-    if policy_str == "MlpPolicy":
-        env = select_env(model_class)
-    else:
-        if model_class in [DQN]:
-            # Avoid memory error when using replay buffer
-            # Reduce the size of the features
-            kwargs = dict(
-                buffer_size=250,
-                learning_starts=100,
-                policy_kwargs=dict(features_extractor_kwargs=dict(features_dim=32)),
-            )
-        env = FakeImageEnv(screen_height=40, screen_width=40, n_channels=2, discrete=model_class == DQN)
-
-    env = DummyVecEnv([lambda: env])
-
-    # create model
-    model = model_class(policy_str, env, verbose=1, **kwargs)
-    model.learn(total_timesteps=300)
-
-    env.reset()
-    observations = np.concatenate([env.step([env.action_space.sample()])[0] for _ in range(10)], axis=0)
-
-    q_net = model.q_net
-    q_net_class = q_net.__class__
-
-    # Get dictionary of current parameters
-    params = deepcopy(q_net.state_dict())
-
-    # Modify all parameters to be random values
-    random_params = dict((param_name, th.rand_like(param)) for param_name, param in params.items())
-
-    # Update model parameters with the new random values
-    q_net.load_state_dict(random_params)
-
-    new_params = q_net.state_dict()
-    # Check that all params are different now
-    for k in params:
-        assert not th.allclose(params[k], new_params[k]), "Parameters did not change as expected."
-
-    params = new_params
-
-    # get selected actions
-    selected_actions, _ = q_net.predict(observations, deterministic=True)
-
-    # Save and load q_net
-    q_net.save(tmp_path / "q_net.pkl")
-
-    del q_net
-
-    q_net = q_net_class.load(tmp_path / "q_net.pkl")
-
-    # check if params are still the same after load
-    new_params = q_net.state_dict()
-
-    # Check that all params are the same as before save load procedure now
-    for key in params:
-        assert th.allclose(params[key], new_params[key]), "Policy parameters not the same after save and load."
-
-    # check if model still selects the same actions
-    new_selected_actions, _ = q_net.predict(observations, deterministic=True)
-    assert np.allclose(selected_actions, new_selected_actions, 1e-4)
-
-    # clear file from os
-    os.remove(tmp_path / "q_net.pkl")
 
 
 @pytest.mark.parametrize("pathtype", [str, pathlib.Path])

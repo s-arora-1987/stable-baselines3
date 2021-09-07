@@ -42,13 +42,10 @@ Discrete      ✔️      ✔️
 Box           ✔️      ✔️
 MultiDiscrete ✔️      ✔️
 MultiBinary   ✔️      ✔️
-Dict          ❌     ✔️
 ============= ====== ===========
 
 Example
 -------
-
-This example is only to demonstrate the use of the library and its functions, and the trained agents may not solve the environments. Optimized hyperparameters can be found in RL Zoo `repository <https://github.com/DLR-RM/rl-baselines3-zoo>`_.
 
 Train a PPO agent on ``Pendulum-v0`` using 4 environments.
 
@@ -57,12 +54,13 @@ Train a PPO agent on ``Pendulum-v0`` using 4 environments.
   import gym
 
   from stable_baselines3 import PPO
+  from stable_baselines3.ppo import MlpPolicy
   from stable_baselines3.common.env_util import make_vec_env
 
   # Parallel environments
-  env = make_vec_env("CartPole-v1", n_envs=4)
+  env = make_vec_env('CartPole-v1', n_envs=4)
 
-  model = PPO("MlpPolicy", env, verbose=1)
+  model = PPO(MlpPolicy, env, verbose=1)
   model.learn(total_timesteps=25000)
   model.save("ppo_cartpole")
 
@@ -165,12 +163,5 @@ PPO Policies
   :members:
 
 .. autoclass:: stable_baselines3.common.policies.ActorCriticCnnPolicy
-  :members:
-  :noindex:
-
-.. autoclass:: MultiInputPolicy
-  :members:
-
-.. autoclass:: stable_baselines3.common.policies.MultiInputActorCriticPolicy
   :members:
   :noindex:
